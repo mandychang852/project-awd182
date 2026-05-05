@@ -172,6 +172,7 @@ export default function NotificationWidget() {
     setFatalError(null)
     setAiError(null)
     setPermErr(false)
+    if (force) setSmartData(null)
     const res = await window.electronAPI.getSmartSummary(force ? { force: true } : {})
     if (res.error === 'permission_denied') {
       setPermErr(true)
