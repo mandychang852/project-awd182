@@ -288,7 +288,7 @@ async function generateCombinedInsight() {
       throw new Error('missing required fields')
     }
 
-    return { error: null, data: json }
+    return { error: null, data: { ...json, fromAI: true } }
   } catch (e) {
     console.error('[insight] AI failed, using fallback. Reason:', e.message)
     return funFallback()  // don't surface raw error text to user

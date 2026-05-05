@@ -68,6 +68,9 @@ function registerIpcHandlers() {
   ipcMain.handle('get-settings', () => storeService.getSettings())
   ipcMain.handle('save-settings', (_, settings) => {
     storeService.saveSettings(settings)
+    // Clear insight cache so new API key / settings take effect immediately
+    _insightCacheDate = null
+    _insightCache     = null
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('data-refresh', { type: 'settings-updated' })
     }
@@ -93,7 +96,8 @@ function registerIpcHandlers() {
     // If a request is already in-flight, wait for it instead of firing another
     if (_insightInFlight) return _insightInFlight
     _insightInFlight = horoscopeService.generateCombinedInsight().then(result => {
-      if (result.data) { _insightCacheDate = today; _insightCache = result }
+      // Only cache AI-generated results (not fallbacks)
+      if (result.data && result.data.fromAI) { _insightCacheDate = today; _insightCache = result }
       _insightInFlight = null
       return result
     }).catch(err => { _insightInFlight = null; throw err })
