@@ -30,7 +30,7 @@
   },
   "build": {
     "appId": "com.agent.notification",
-    "productName": "Agent Notification",
+    "productName": "我的小當家",
     "files": [
       "dist/**/*",
       "electron/**/*"
