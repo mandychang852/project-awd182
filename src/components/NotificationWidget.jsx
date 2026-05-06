@@ -281,9 +281,17 @@ export default function NotificationWidget() {
               需要完整磁碟存取權限
             </div>
             <div style={{ fontSize: 'var(--fs-body)', color: 'var(--text-secondary)', lineHeight: 1.6, maxWidth: 380, textAlign: 'center' }}>
-              請前往「系統設定 → 隱私權與安全性 → 完整磁碟存取」，將正在執行本程式的應用程式加入允許清單後重啟。
+              請將本程式加入「完整磁碟存取」允許清單後重啟。
             </div>
-            <button className="btn btn-primary btn-sm" onClick={load} style={{ marginTop: 12 }}>重試</button>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => window.electronAPI.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles')}
+              >
+                🔓 開啟系統設定
+              </button>
+              <button className="btn btn-ghost btn-sm" onClick={load}>重試</button>
+            </div>
           </div>
         )}
 
