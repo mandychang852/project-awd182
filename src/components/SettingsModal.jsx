@@ -51,21 +51,27 @@ const LLM_PROVIDERS = [
   {
     value: 'openai', label: 'OpenAI',
     keyField: 'openaiApiKey', keyLabel: 'OpenAI API Key',
-    keyHint: '前往 platform.openai.com 申請，sk-... 開頭',
+    keyHint: 'sk-... 開頭',
+    keyUrl: 'https://platform.openai.com/api-keys',
+    keyUrlLabel: '前往 OpenAI 申請 API Key',
     placeholder: 'sk-...',
     models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'],
   },
   {
     value: 'gemini', label: 'Google Gemini',
     keyField: 'geminiApiKey', keyLabel: 'Google Gemini API Key',
-    keyHint: '前往 aistudio.google.com/app/apikey 免費申請',
+    keyHint: 'AIza... 開頭，免費申請',
+    keyUrl: 'https://aistudio.google.com/app/apikey',
+    keyUrlLabel: '前往 Google AI Studio 申請 API Key（免費）',
     placeholder: 'AIza...',
     models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.5-flash-lite'],
   },
   {
     value: 'claude', label: 'Anthropic Claude',
     keyField: 'claudeApiKey', keyLabel: 'Anthropic Claude API Key',
-    keyHint: '前往 console.anthropic.com 申請，sk-ant-... 開頭',
+    keyHint: 'sk-ant-... 開頭',
+    keyUrl: 'https://console.anthropic.com/settings/keys',
+    keyUrlLabel: '前往 Anthropic Console 申請 API Key',
     placeholder: 'sk-ant-...',
     models: ['claude-3-5-haiku-20241022', 'claude-3-5-sonnet-20241022', 'claude-3-opus-20240229'],
   },
@@ -243,6 +249,17 @@ export default function SettingsModal({ onClose }) {
                 value={settings[activeProv.keyField] || ''}
                 onChange={(e) => set(activeProv.keyField, e.target.value)}
               />
+              {activeProv.keyUrl && (
+                <div style={{ marginTop: 4 }}>
+                  👉 <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ fontSize: 11, padding: '2px 6px', color: 'var(--accent-light)', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer' }}
+                    onClick={() => window.electronAPI.openExternal(activeProv.keyUrl)}
+                  >
+                    {activeProv.keyUrlLabel}
+                  </button>
+                </div>
+              )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
                 <button
                   className="btn btn-ghost btn-sm"
