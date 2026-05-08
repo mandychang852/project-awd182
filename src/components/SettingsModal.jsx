@@ -209,7 +209,7 @@ export default function SettingsModal({ onClose }) {
               <input
                 className="input"
                 type="password"
-                placeholder="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+                placeholder="貼上 Token"
                 value={settings.exchangeRateToken || ''}
                 onChange={(e) => set('exchangeRateToken', e.target.value)}
               />
