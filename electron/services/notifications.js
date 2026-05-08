@@ -80,11 +80,16 @@ async function readMacNotifications() {
       const parsed = bplist.parseBuffer(buf)[0]
 
       const req      = parsed?.req || parsed
-      const title    = req?.titl || req?.title || ''
-      const subtitle = req?.subt || req?.subtitle || ''  // sender name inside group chats
+      const rawTitle = req?.titl || req?.title || ''
       const body     = req?.body || ''
 
-      if (!title && !body) continue
+      if (!rawTitle && !body) continue
+
+      // LINE encodes group messages as "sender [group name]" in the title field.
+      // Parse this out so group and 1-on-1 messages are distinguishable.
+      const groupMatch = rawTitle.match(/^(.+?)\s+\[([^\]]+)\]$/)
+      const title    = groupMatch ? groupMatch[2] : rawTitle  // group name or contact name
+      const subtitle = groupMatch ? groupMatch[1] : ''         // sender inside group, empty for 1-on-1
 
       notifications.push({
         id:        buf.slice(0, 8).toString('hex'),
