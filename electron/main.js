@@ -191,14 +191,29 @@ function registerIpcHandlers() {
       return { ok: false, error: detail }
     }
   })
+  // Apps that support URL schemes — more reliable than `open -b` for Electron-based apps (Slack, etc.)
+  const BUNDLE_URL_SCHEMES = {
+    'com.tinyspeck.slackmacgap': 'slack://open',
+    'com.microsoft.teams':       'msteams://l/chat',
+    'com.microsoft.teams2':      'msteams://l/chat',
+    'com.discord.Discord':       'discord://',
+    'com.facebook.Messenger':    'fb-messenger://',
+  }
+
   ipcMain.handle('ai-reply', (_, { bundleId, suggestedReply }) => {
-    const { clipboard } = require('electron')
+    const { clipboard, shell } = require('electron')
     // Use Electron clipboard API (safe, cross-platform, no shell injection risk)
     try { if (suggestedReply) clipboard.writeText(suggestedReply) } catch {}
     // Only allow well-formed reverse-domain bundle IDs (e.g. jp.naver.line.mac)
     if (bundleId && /^[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?$/.test(bundleId)) {
-      const { execSync } = require('child_process')
-      try { execSync(`open -b "${bundleId}"`) } catch {}
+      const urlScheme = BUNDLE_URL_SCHEMES[bundleId]
+      if (urlScheme) {
+        // URL scheme is more reliable for Electron-based apps (Slack, Teams, etc.)
+        shell.openExternal(urlScheme).catch(() => {})
+      } else {
+        const { execSync } = require('child_process')
+        try { execSync(`open -b "${bundleId}"`) } catch {}
+      }
     }
     return { ok: true }
   })
