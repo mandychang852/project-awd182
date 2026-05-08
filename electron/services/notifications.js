@@ -26,7 +26,7 @@ const APP_NAME_MAP = {
   'io.notion.id':                'Notion',
 }
 
-function getAppName(bundleId) {
+function getMacAppName(bundleId) {
   return APP_NAME_MAP[bundleId] || bundleId?.split('.').pop() || 'Unknown'
 }
 
@@ -35,95 +35,70 @@ async function readMacNotifications() {
     return { error: 'db_not_found', notifications: [] }
   }
 
-  let SQL
-  try {
-    const initSqlJs   = require('sql.js')
-    const { app }     = require('electron')
-    const wasmBinary  = fs.readFileSync(
-      app.isPackaged
-        ? path.join(process.resourcesPath, 'sql-wasm.wasm')
-        : path.join(__dirname, '../../node_modules/sql.js/dist/sql-wasm.wasm')
-    )
-    SQL = await initSqlJs({ wasmBinary })
-  } catch (e) {
-    return { error: 'sql_load_failed', notifications: [] }
-  }
+  // Use macOS built-in sqlite3 CLI instead of sql.js to correctly read WAL files.
+  // sql.js reads a binary snapshot of the main db file and misses unflushed WAL data,
+  // causing notifications to appear frozen. The system sqlite3 CLI auto-applies WAL.
+  const CORE_DATA_OFFSET = 978307200
+  const hoursBack = 48
+  const cutoff = Math.floor(Date.now() / 1000) - CORE_DATA_OFFSET - (hoursBack * 3600)
 
-  let dbBuffer
-  const tmpPath = path.join(os.tmpdir(), `notif_db_${Date.now()}`)
+  const query = [
+    `SELECT hex(r.data), r.delivered_date, a.identifier`,
+    `FROM record r`,
+    `LEFT JOIN app a ON r.app_id = a.app_id`,
+    `WHERE r.delivered_date > ${cutoff}`,
+    `ORDER BY r.delivered_date DESC LIMIT 200;`,
+  ].join(' ')
+
+  let stdout
   try {
-    // First try Node fs.copyFileSync
-    fs.copyFileSync(MAC_DB_PATH, tmpPath)
-  } catch (e1) {
-    if (e1.code === 'EACCES' || e1.code === 'EPERM') {
-      // Fallback: shell cp sometimes bypasses sandbox limits
-      try {
-        execSync(`cp "${MAC_DB_PATH}" "${tmpPath}"`, { timeout: 5000 })
-      } catch (e2) {
-        return { error: 'permission_denied', notifications: [] }
-      }
-    } else {
-      return { error: e1.message, notifications: [] }
+    stdout = execSync(`sqlite3 "${MAC_DB_PATH}" "${query}"`, {
+      timeout: 10000,
+      maxBuffer: 20 * 1024 * 1024,
+    }).toString()
+  } catch (e) {
+    const msg = e.message || ''
+    if (msg.includes('unable to open') || msg.includes('EACCES') || msg.includes('permission')) {
+      return { error: 'permission_denied', notifications: [] }
     }
-  }
-  try {
-    dbBuffer = fs.readFileSync(tmpPath)
-  } catch (e) {
-    return { error: 'permission_denied', notifications: [] }
-  } finally {
-    try { fs.unlinkSync(tmpPath) } catch {}
-  }
-
-  const db = new SQL.Database(dbBuffer)
-
-  // Only fetch notifications still uncleared in macOS Notification Center.
-  // The `delivered` table stores a blob of concatenated 16-byte UUIDs per app.
-  // When the user dismisses a notification, macOS removes its UUID from the blob.
-  let rows = []
-  try {
-    const result = db.exec(
-      `SELECT r.data, r.delivered_date, a.identifier
-       FROM record r
-       LEFT JOIN app a ON r.app_id = a.app_id
-       WHERE EXISTS (
-         SELECT 1 FROM delivered d
-         WHERE d.app_id = r.app_id
-           AND d.list IS NOT NULL
-           AND INSTR(d.list, r.uuid) > 0
-       )
-       ORDER BY r.delivered_date DESC LIMIT 200`
-    )
-    rows = result?.[0]?.values || []
-  } catch {
-    db.close()
     return { error: 'query_failed', notifications: [] }
   }
 
-  db.close()
-
-  const CORE_DATA_OFFSET = 978307200
   const bplist        = require('bplist-parser')
   const notifications = []
 
-  for (const [data, delivered_date, bundleId] of rows) {
+  for (const line of stdout.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    const parts = trimmed.split('|')
+    if (parts.length < 2) continue
+    const [hexData, deliveredDate, rawBundleId] = parts
+    const bundleId = (rawBundleId || '').trim()
+
     try {
-      const buf    = Buffer.from(data)
+      const buf    = Buffer.from(hexData, 'hex')
       const parsed = bplist.parseBuffer(buf)[0]
 
-      // macOS uses abbreviated plist keys: titl/body inside req
-      const req   = parsed?.req || parsed
-      const title = req?.titl || req?.title || ''
-      const body  = req?.body || ''
+      const req      = parsed?.req || parsed
+      const rawTitle = req?.titl || req?.title || ''
+      const body     = req?.body || ''
 
-      if (!title && !body) continue
+      if (!rawTitle && !body) continue
+
+      // LINE encodes group messages as "sender [group name]" in the title field.
+      // Parse this out so group and 1-on-1 messages are distinguishable.
+      const groupMatch = rawTitle.match(/^(.+?)\s+\[([^\]]+)\]$/)
+      const title    = groupMatch ? groupMatch[2] : rawTitle  // group name or contact name
+      const subtitle = groupMatch ? groupMatch[1] : ''         // sender inside group, empty for 1-on-1
 
       notifications.push({
         id:        buf.slice(0, 8).toString('hex'),
-        app:       getAppName(bundleId || ''),
+        app:       getMacAppName(bundleId || ''),
         bundleId:  bundleId || '',
         title,
+        subtitle,
         body,
-        timestamp: (delivered_date + CORE_DATA_OFFSET) * 1000,
+        timestamp: (parseFloat(deliveredDate) + CORE_DATA_OFFSET) * 1000,
       })
     } catch {
       // skip malformed entries
@@ -134,30 +109,169 @@ async function readMacNotifications() {
 }
 
 // ── Windows ───────────────────────────────────────────────────────────────────
+const WIN_DB_PATH = path.join(
+  os.homedir(),
+  'AppData/Local/Microsoft/Windows/Notifications/wpndatabase.db'
+)
+
+const WIN_APP_NAME_MAP = {
+  'LINE': 'LINE',
+  'SkyDrive': 'OneDrive',
+  'OneDrive': 'OneDrive',
+  'ScreenSketch': '剪取與繪圖',
+  'Slack': 'Slack',
+  'WhatsApp': 'WhatsApp',
+  'microsoft.windowslive.mail': 'Mail',
+  'Microsoft.Office.OUTLOOK': 'Outlook',
+  'Telegram': 'Telegram',
+  'Discord': 'Discord',
+  'Messenger': 'Messenger',
+  'Teams': 'Teams',
+}
+
+function getWinAppName(primaryId) {
+  for (const [key, name] of Object.entries(WIN_APP_NAME_MAP)) {
+    if (primaryId.toLowerCase().includes(key.toLowerCase())) return name
+  }
+  const parts = primaryId.split('!')
+  const lastPart = parts[parts.length - 1]
+  const name = lastPart.split('.').pop() || 'Unknown'
+  if (name === 'App') return '應用程式'
+  return name
+}
+
 async function readWindowsNotifications() {
-  const ps = `
-[Windows.UI.Notifications.ToastNotificationManager,Windows.UI.Notifications,ContentType=WindowsRuntime] | Out-Null
-$histories = [Windows.UI.Notifications.ToastNotificationManager]::History.GetHistory()
-$histories | Select-Object -First 50 | ConvertTo-Json -Depth 2
-`
+  if (!fs.existsSync(WIN_DB_PATH)) {
+    return { error: 'db_not_found', notifications: [] }
+  }
+
+  const tmpDir = os.tmpdir()
+  const timestamp = Date.now()
+  const tmpDbPath = path.join(tmpDir, `win_notif_${timestamp}.db`)
+  const tmpWalPath = path.join(tmpDir, `win_notif_${timestamp}.db-wal`)
+  const tmpShmPath = path.join(tmpDir, `win_notif_${timestamp}.db-shm`)
+
   try {
-    const output = execSync(`powershell -NoProfile -Command "${ps.replace(/\n/g, ' ')}"`, {
-      timeout: 8000,
-      encoding: 'utf8',
-    })
-    const items = JSON.parse(output || '[]')
-    const arr   = Array.isArray(items) ? items : [items]
-    const notifications = arr.map((item, i) => ({
-      id:        String(i),
-      app:       item.AppId || 'Unknown',
-      bundleId:  item.AppId || '',
-      title:     item.Content?.Payload || '',
-      body:      '',
-      timestamp: Date.now(),
-    }))
-    return { error: null, notifications }
+    // Copy all 3 files to handle WAL mode
+    fs.copyFileSync(WIN_DB_PATH, tmpDbPath)
+    if (fs.existsSync(WIN_DB_PATH + '-wal')) fs.copyFileSync(WIN_DB_PATH + '-wal', tmpWalPath)
+    if (fs.existsSync(WIN_DB_PATH + '-shm')) fs.copyFileSync(WIN_DB_PATH + '-shm', tmpShmPath)
+
+    let rows = []
+    let method = 'sqljs'
+
+    const query = `
+      SELECT n.ArrivalTime, h.PrimaryId, n.Payload
+      FROM Notification n
+      JOIN NotificationHandler h ON n.HandlerId = h.RecordId
+      WHERE n.PayloadType = 'Xml' AND n.Payload LIKE '%<toast%'
+      ORDER BY n.ArrivalTime DESC LIMIT 200;
+    `.replace(/\n/g, ' ')
+
+    // Try using sqlite3 CLI if available (it handles WAL perfectly)
+    try {
+      const output = execSync(`sqlite3 -json "${tmpDbPath}" "${query}"`, { encoding: 'utf8', timeout: 5000 })
+      if (output && output.trim()) {
+        const parsed = JSON.parse(output)
+        rows = parsed.map(r => [r.ArrivalTime, r.PrimaryId, r.Payload])
+        method = 'sqlite3-cli-json'
+      }
+    } catch (cliError) {
+      // Fallback to manual parsing if -json is not supported or CLI fails
+      try {
+        // Use a very unique separator to handle multi-line and special characters
+        const SEP = '|||SEP|||'
+        const queryWithSep = `
+          SELECT n.ArrivalTime || '${SEP}' || h.PrimaryId || '${SEP}' || CAST(n.Payload AS TEXT)
+          FROM Notification n
+          JOIN NotificationHandler h ON n.HandlerId = h.RecordId
+          WHERE n.PayloadType = 'Xml' AND n.Payload LIKE '%<toast%'
+          ORDER BY n.ArrivalTime DESC LIMIT 200;
+        `.replace(/\n/g, ' ')
+        
+        const output = execSync(`sqlite3 "${tmpDbPath}" "${queryWithSep}"`, { encoding: 'utf8', timeout: 8000 })
+        if (output) {
+          // Manual multi-line parsing is still tricky with raw output, but let's try 
+          // splitting by ArrivalTime pattern if possible, or just skip if -json fails
+          // For now, let's just use the existing split but be more careful
+          rows = output.split('\n').filter(line => line.includes(SEP)).map(line => {
+            const parts = line.split(SEP)
+            return [parts[0], parts[1], parts[2]]
+          })
+          method = 'sqlite3-cli-sep'
+        }
+      } catch (e2) {}
+    }
+
+    if (rows.length === 0) {
+      const initSqlJs = require('sql.js')
+      const { app } = require('electron')
+      const wasmBinary = fs.readFileSync(
+        app.isPackaged
+          ? path.join(process.resourcesPath, 'sql-wasm.wasm')
+          : path.join(__dirname, '../../node_modules/sql.js/dist/sql-wasm.wasm')
+      )
+      const SQL = await initSqlJs({ wasmBinary })
+      const dbBuffer = fs.readFileSync(tmpDbPath)
+      const db = new SQL.Database(dbBuffer)
+      const result = db.exec(query)
+      rows = result?.[0]?.values || []
+      db.close()
+    }
+
+    const notifications = []
+    for (const [arrivalTime, primaryId, payload] of rows) {
+      try {
+        let xml = (typeof payload === 'string') ? payload : Buffer.from(payload).toString('utf8')
+        
+        // Basic unescape/cleanup
+        xml = xml.replace(/&amp;/g, '&')
+                 .replace(/&lt;/g, '<')
+                 .replace(/&gt;/g, '>')
+                 .replace(/&quot;/g, '"')
+                 .replace(/&apos;/g, "'")
+        
+        const texts = []
+        const regex = /<text[^>]*>([\s\S]*?)<\/text>/gi
+        let match
+        while ((match = regex.exec(xml)) !== null) {
+          let content = match[1].trim()
+          // Strip CDATA if present
+          content = content.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').trim()
+          if (content) texts.push(content)
+        }
+
+        if (texts.length === 0) continue
+
+        const title = texts[0] || ''
+        const body  = texts.slice(1).join('\n') || ''
+        
+        // Windows FILETIME is 100-nanosecond intervals since Jan 1, 1601.
+        // Convert to Unix timestamp (milliseconds).
+        const arrivalTimeBigInt = BigInt(arrivalTime)
+        const unixTimestamp = Number((arrivalTimeBigInt / 10000n) - 11644473600000n)
+
+        notifications.push({
+          id:        String(arrivalTime),
+          app:       getWinAppName(primaryId),
+          bundleId:  primaryId,
+          title,
+          body,
+          timestamp: unixTimestamp,
+        })
+      } catch (e) {
+        // skip malformed entries
+      }
+    }
+
+    // Cleanup
+    try { fs.unlinkSync(tmpDbPath) } catch {}
+    try { fs.unlinkSync(tmpWalPath) } catch {}
+    try { fs.unlinkSync(tmpShmPath) } catch {}
+
+    return { error: null, notifications, method }
   } catch (e) {
-    return { error: 'powershell_failed', notifications: [] }
+    return { error: e.message, notifications: [] }
   }
 }
 

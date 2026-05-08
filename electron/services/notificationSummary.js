@@ -59,82 +59,113 @@ async function generateSmartSummary(notifications) {
     return { overallSummary: null, groups: [], demo: true, error: null }
   }
 
-  // Build the flat message list for the prompt
-  const lines = notifications.map((n, i) => {
-    const time = formatTime(n.timestamp)
-    const body = n.body ? `${n.title} ${time}: ${n.body}` : `${n.title} ${time}: （無內文）`
-    return `[${i}] ${n.app} ${body}`
+  // ── Step 1: Pre-group by code (not AI) ───────────────────────────────────
+  // Group key = app::title (title is already parsed: group name or contact name)
+  // This ensures Andy (1-on-1) and Andy's messages in group 我餓 are ALWAYS separate.
+  const preGroupMap = {}
+  notifications.forEach((n, idx) => {
+    const key = `${n.app}::${n.title}`
+    if (!preGroupMap[key]) {
+      preGroupMap[key] = {
+        app:      n.app,
+        title:    n.title,       // group name or contact name
+        bundleId: n.bundleId,
+        isGroup:  !!n.subtitle,  // true if parsed from "sender [group]" format
+        msgs:     [],
+      }
+    }
+    preGroupMap[key].msgs.push({ idx, body: n.body, subtitle: n.subtitle, timestamp: n.timestamp })
   })
+  const preGroups = Object.values(preGroupMap).sort(
+    (a, b) => Math.max(...b.msgs.map(m => m.timestamp)) - Math.max(...a.msgs.map(m => m.timestamp))
+  )
 
-  const totalSenders = new Set(notifications.map((n) => `${n.app}::${n.title}`)).size
+  const totalSenders = preGroups.length
 
-  // Fallback for no AI
+  // ── Step 2: Fallback (no AI) ──────────────────────────────────────────────
   if (!isConfigured()) {
-    const groups = buildFallbackGroups(notifications)
-    const sorted = sortByUrgency(groups)
+    const groups = preGroups.map(g => {
+      const messages = g.msgs
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .map(m => ({ body: m.body, timestamp: m.timestamp }))
+      const lastTimestamp = Math.max(...g.msgs.map(m => m.timestamp))
+      const label = g.isGroup
+        ? `${g.title}（群組）`
+        : g.title
+      return {
+        groupKey:       `${g.app}::${g.title}`,
+        app:            g.app,
+        sender:         label,
+        bundleId:       g.bundleId,
+        topic:          null,
+        urgency:        null,
+        messages,
+        lastTimestamp,
+        summary:        null,
+        suggestedReply: null,
+      }
+    })
     return {
-      overallSummary: `共 ${notifications.length} 則訊息，來自 ${totalSenders} 位聯絡人`,
-      groups: sorted,
+      overallSummary: `共 ${notifications.length} 則訊息，來自 ${totalSenders} 個對話`,
+      groups,
       demo: true,
       error: null,
     }
   }
 
-  const prompt = `你是使用者的個人助理。以下是使用者剛收到的未讀通知（格式：[編號] App 發送者 時間: 內文）：
+  // ── Step 3: Build prompt — one entry per pre-determined group ─────────────
+  // AI is asked to analyze each group (NOT decide grouping).
+  const groupLines = preGroups.map((g, gi) => {
+    const label = g.isGroup ? `[群組] ${g.title}` : `[1-on-1] ${g.title}`
+    const msgList = g.msgs
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .map(m => {
+        const time   = formatTime(m.timestamp)
+        const sender = m.subtitle ? `${m.subtitle}` : g.title
+        return `  - ${sender} ${time}: ${m.body || '（無內文）'}`
+      }).join('\n')
+    return `G${gi} ${g.app} ${label}:\n${msgList}`
+  })
 
-${lines.join('\n')}
+  const prompt = `你是使用者的個人助理。以下是使用者未讀通知，已按對話分組：
 
-請分析並輸出 JSON（只輸出 JSON，不要任何其他說明文字）：
+${groupLines.join('\n\n')}
+
+請為每個群組（G0, G1, ...）輸出 JSON 分析，只輸出 JSON，不要任何說明文字：
 {
-  "overallSummary": "一句話總結，例如『收到 X 則訊息，來自 Y 位聯絡人』",
+  "overallSummary": "一句話總結，例如『收到 X 則訊息，來自 Y 個對話』",
   "groups": [
     {
-      "app": "App名稱",
-      "sender": "發送者名稱",
-      "topic": "此話題的簡短標題（10字內）",
-      "urgency": "high" 或 "medium" 或 "low" 或 null,
-      "messageIndices": [對應上方的編號陣列],
-      "summary": "此話題摘要（不超過30字）",
-      "suggestedReply": "建議回覆內容（自然口語，不超過50字，直接給內容不要有前綴）"
+      "groupIndex": 0,
+      "topic": "此對話的簡短標題（10字內）",
+      "urgency": "high" | "medium" | "low" | null,
+      "summary": "摘要（不超過30字）",
+      "suggestedReply": "建議回覆（自然口語，不超過50字，直接給內容不要有前綴）"
     }
   ]
 }
 
-規則：
-1. 同一發送者不同話題 → 拆成不同 group
-2. 同一發送者同一話題的多則訊息 → 合併成一個 group，messageIndices 包含所有該話題的編號
-3. urgency 判斷：確定很急（問時間/截止/緊急字眼）→ high；一般工作或問問題 → medium；聊天閒聊 → low；無法判斷 → null
-4. groups 按 urgency 排序：high → medium → low → null，同 urgency 按最新時間排
-5. 只輸出 JSON，不要 markdown code block`
+urgency 判斷：確定很急（問時間/截止/緊急字眼）→ high；一般工作或問問題 → medium；聊天閒聊 → low；無法判斷 → null
+groups 按 urgency 排序：high → medium → low → null`
 
   try {
     const raw = await callLLM({
       user: prompt,
       temperature: 0.3,
-      // maxTokens not set — let the model output a complete JSON without truncation
     })
     console.log('[SmartSummary] output length:', raw.length, '| preview:', raw.slice(0, 150))
 
-    // Strip markdown code fences if present
     let cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
 
-    // If JSON is truncated, attempt to recover by closing open arrays/objects
     let parsed
     try {
       parsed = JSON.parse(cleaned)
     } catch {
-      // Find last complete group object ending with }
       const lastBrace = cleaned.lastIndexOf('}')
       if (lastBrace > 0) {
-        // Close the groups array and root object
         const truncated = cleaned.slice(0, lastBrace + 1)
-        try {
-          // Try wrapping as complete JSON
-          parsed = JSON.parse(truncated + ']}')
-        } catch {
-          try {
-            parsed = JSON.parse(truncated + ']}}')
-          } catch {
+        try { parsed = JSON.parse(truncated + ']}') } catch {
+          try { parsed = JSON.parse(truncated + ']}}') } catch {
             throw new Error('JSON parse failed after recovery attempt')
           }
         }
@@ -143,43 +174,60 @@ ${lines.join('\n')}
       }
     }
 
-    // Hydrate each group with full message objects from original notifications
-    const groups = (parsed.groups || []).map((g) => {
-      const indices  = Array.isArray(g.messageIndices) ? g.messageIndices : []
-      const messages = indices
-        .map((i) => notifications[i])
-        .filter(Boolean)
-        .map((n) => ({ body: n.body, timestamp: n.timestamp }))
-      const lastTimestamp = messages.reduce((max, m) => Math.max(max, m.timestamp), 0)
-      const bundleId = (notifications.find(
-        (n) => n.app === g.app && n.title === g.sender
-      ) || {}).bundleId || ''
+    // ── Step 4: Hydrate — merge AI analysis back into pre-groups ─────────────
+    const aiByIndex = {}
+    for (const ag of (parsed.groups || [])) {
+      if (ag.groupIndex != null) aiByIndex[ag.groupIndex] = ag
+    }
+
+    const groups = preGroups.map((g, gi) => {
+      const ai  = aiByIndex[gi] || {}
+      const messages = g.msgs
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .map(m => ({ body: m.body, timestamp: m.timestamp }))
+      const lastTimestamp = Math.max(...g.msgs.map(m => m.timestamp))
+      const label = g.isGroup ? `${g.title}（群組）` : g.title
 
       return {
-        groupKey:      `${g.app}::${g.sender}::${g.topic}`,
-        app:           g.app || '',
-        sender:        g.sender || '',
-        bundleId,
-        topic:         g.topic || null,
-        urgency:       g.urgency || null,
+        groupKey:       `${g.app}::${g.title}`,
+        app:            g.app,
+        sender:         label,
+        bundleId:       g.bundleId,
+        topic:          ai.topic          || null,
+        urgency:        ai.urgency        || null,
         messages,
         lastTimestamp,
-        summary:       g.summary || null,
-        suggestedReply: g.suggestedReply || null,
+        summary:        ai.summary        || null,
+        suggestedReply: ai.suggestedReply || null,
       }
     })
 
+    const sorted = sortByUrgency(groups)
+
     return {
-      overallSummary: parsed.overallSummary || null,
-      groups,
+      overallSummary: parsed.overallSummary || `共 ${notifications.length} 則訊息，來自 ${totalSenders} 個對話`,
+      groups: sorted,
       demo: false,
       error: null,
     }
   } catch (e) {
-    // LLM or parse error → fallback to basic grouping
-    const groups = sortByUrgency(buildFallbackGroups(notifications))
+    // LLM or parse error → fallback to pre-grouped result (no AI analysis)
+    const groups = sortByUrgency(preGroups.map((g, gi) => {
+      const messages = g.msgs
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .map(m => ({ body: m.body, timestamp: m.timestamp }))
+      const lastTimestamp = Math.max(...g.msgs.map(m => m.timestamp))
+      return {
+        groupKey: `${g.app}::${g.title}`,
+        app: g.app,
+        sender: g.isGroup ? `${g.title}（群組）` : g.title,
+        bundleId: g.bundleId,
+        topic: null, urgency: null, messages, lastTimestamp,
+        summary: null, suggestedReply: null,
+      }
+    }))
     return {
-      overallSummary: `共 ${notifications.length} 則訊息，來自 ${totalSenders} 位聯絡人`,
+      overallSummary: `共 ${notifications.length} 則訊息，來自 ${totalSenders} 個對話`,
       groups,
       demo: true,
       error: e.message,

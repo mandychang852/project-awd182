@@ -191,13 +191,25 @@ export default function SettingsModal({ onClose }) {
           {/* ── API 金鑰 ────────────────────────────────────────────────────── */}
           <Section title="🔑 API 金鑰">
             <Field
+              label="匯率 API 代理 URL"
+              hint="① 點下方連結前往 SuperiorAPIs → ② 登入後找到「各大銀行臺幣匯兌價格」專案，點進去 → ③ 點「輸入」頁籤 → ④ 頁面下方點「</> 程式碼」按鈕 → ⑤ 在程式碼片段中複製第五行以 https://superiorapis-creator 開頭的完整 URL → 貼入此欄位。"
+            >
+              <input
+                className="input"
+                type="text"
+                placeholder="https://superiorapis-creator.cteam.com.tw/manager/feature/proxy/..."
+                value={settings.exchangeRateApiUrl || ''}
+                onChange={(e) => set('exchangeRateApiUrl', e.target.value)}
+              />
+            </Field>
+            <Field
               label="匯率 API Token"
-              hint="① 點下方連結，註冊並登入 → ② 自動跳轉至「各大銀行臺幣匯兌價格」專案 → ③ 進入「整合」頁面複製 Token，貼上即可啟用匯率監控。"
+              hint="同一個專案 → 進入「整合」頁籤 → 複製 Token 貼入此欄位。"
             >
               <input
                 className="input"
                 type="password"
-                placeholder="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+                placeholder="貼上 Token"
                 value={settings.exchangeRateToken || ''}
                 onChange={(e) => set('exchangeRateToken', e.target.value)}
               />
@@ -207,7 +219,7 @@ export default function SettingsModal({ onClose }) {
                   style={{ fontSize: 11, padding: '2px 6px', color: 'var(--accent-light)', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer' }}
                   onClick={() => window.electronAPI.openExternal('https://superiorapis.cteam.com.tw/?tryme=44782144a0ce')}
                 >
-                  前往 SuperiorAPIs 註冊 → 複製 API Token
+                  前往 SuperiorAPIs 取得 URL 與 Token
                 </button>
               </div>
             </Field>

@@ -9,12 +9,19 @@ let storeService, weatherService, horoscopeService, stocksService, notifications
 let mainWindow = null
 
 function createWindow() {
+  const iconPath = process.platform === 'darwin'
+    ? path.join(__dirname, '../build/icons/mac/icon.icns')
+    : process.platform === 'win32'
+      ? path.join(__dirname, '../build/icons/win/icon.ico')
+      : path.join(__dirname, '../build/icons/png/512x512.png')
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
     minWidth: 960,
     minHeight: 680,
     backgroundColor: '#1E2D3D',
+    icon: iconPath,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -55,7 +62,8 @@ function loadServices() {
 
 function registerIpcHandlers() {
   // ── Caches ────────────────────────────────────────────────────────────────
-  let _smartSummaryCache    = null   // { hash, result }
+  let _smartSummaryCache    = null   // { hash, result } — invalidated when notifications change
+  let _smartSummaryLastGood = null   // last successful AI result — kept across hash changes
   let _smartSummaryInFlight = null   // dedup in-flight promise
   let _insightCacheDate     = null   // 'YYYY-M-D'
   let _insightCache         = null
@@ -135,12 +143,19 @@ function registerIpcHandlers() {
       .then((r) => {
         // Only cache successful AI results; failed/fallback results are NOT cached
         // so the next retry will actually re-call the API
-        if (!r.error) _smartSummaryCache = { hash, result: r }
+        if (!r.error) {
+          _smartSummaryCache    = { hash, result: r }
+          _smartSummaryLastGood = r  // persist across hash changes for stale fallback
+        }
         _smartSummaryInFlight = null
         return r
       })
       .catch((e) => {
         _smartSummaryInFlight = null
+        // If AI fails but we have a previous good result, return it with stale flag
+        if (_smartSummaryLastGood) {
+          return { ..._smartSummaryLastGood, stale: true, staleError: e.message }
+        }
         return { groups: [], overallSummary: null, demo: true, error: e.message }
       })
     return _smartSummaryInFlight
@@ -191,10 +206,40 @@ function registerIpcHandlers() {
       return { ok: false, error: detail }
     }
   })
-  ipcMain.handle('ai-reply', (_, { bundleId, suggestedReply }) => {
-    const { execSync } = require('child_process')
-    try { execSync(`printf '%s' ${JSON.stringify(suggestedReply)} | pbcopy`) } catch {}
-    try { if (bundleId) execSync(`open -b "${bundleId}"`) } catch {}
+  // Apps that support URL schemes — more reliable than `open -b` for Electron-based apps (Slack, etc.)
+  const BUNDLE_URL_SCHEMES = {
+    'com.tinyspeck.slackmacgap': 'slack://open',
+    'com.microsoft.teams':       'msteams://l/chat',
+    'com.microsoft.teams2':      'msteams://l/chat',
+    'com.discord.Discord':       'discord://',
+    'com.facebook.Messenger':    'fb-messenger://',
+  }
+  // Fallback by display app name (when bundleId is missing/empty)
+  const APP_NAME_URL_SCHEMES = {
+    'Slack':     'slack://open',
+    'Teams':     'msteams://l/chat',
+    'Discord':   'discord://',
+    'Messenger': 'fb-messenger://',
+  }
+
+  ipcMain.handle('ai-reply', (_, { bundleId, suggestedReply, app }) => {
+    const { clipboard, shell } = require('electron')
+    // Use Electron clipboard API (safe, cross-platform, no shell injection risk)
+    try { if (suggestedReply) clipboard.writeText(suggestedReply) } catch {}
+    const cleanBundleId = (bundleId || '').trim()
+    // Only allow well-formed reverse-domain bundle IDs (e.g. jp.naver.line.mac)
+    if (cleanBundleId && /^[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?$/.test(cleanBundleId)) {
+      const urlScheme = BUNDLE_URL_SCHEMES[cleanBundleId]
+      if (urlScheme) {
+        shell.openExternal(urlScheme).catch(() => {})
+      } else {
+        const { execSync } = require('child_process')
+        try { execSync(`open -b "${cleanBundleId}"`) } catch {}
+      }
+    } else if (app && APP_NAME_URL_SCHEMES[app]) {
+      // Fallback: open by app display name when bundleId unavailable
+      shell.openExternal(APP_NAME_URL_SCHEMES[app]).catch(() => {})
+    }
     return { ok: true }
   })
 
@@ -221,6 +266,12 @@ app.whenReady().then(() => {
   loadServices()
   registerIpcHandlers()
   createWindow()
+  // Set Dock icon on macOS (use PNG — more reliable than icns in dev mode)
+  if (process.platform === 'darwin' && app.dock) {
+    const { nativeImage } = require('electron')
+    const dockIcon = nativeImage.createFromPath(path.join(__dirname, '../build/icons/png/512x512.png'))
+    if (!dockIcon.isEmpty()) app.dock.setIcon(dockIcon)
+  }
   schedulerService.initScheduler(mainWindow)
 
   app.on('activate', () => {
