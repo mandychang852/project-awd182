@@ -9,12 +9,19 @@ let storeService, weatherService, horoscopeService, stocksService, notifications
 let mainWindow = null
 
 function createWindow() {
+  const iconPath = process.platform === 'darwin'
+    ? path.join(__dirname, '../build/icons/mac/icon.icns')
+    : process.platform === 'win32'
+      ? path.join(__dirname, '../build/icons/win/icon.ico')
+      : path.join(__dirname, '../build/icons/png/512x512.png')
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
     minWidth: 960,
     minHeight: 680,
     backgroundColor: '#1E2D3D',
+    icon: iconPath,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -259,6 +266,12 @@ app.whenReady().then(() => {
   loadServices()
   registerIpcHandlers()
   createWindow()
+  // Set Dock icon on macOS (works in dev mode too)
+  if (process.platform === 'darwin' && app.dock) {
+    const { nativeImage } = require('electron')
+    const dockIcon = nativeImage.createFromPath(path.join(__dirname, '../build/icons/mac/icon.icns'))
+    if (!dockIcon.isEmpty()) app.dock.setIcon(dockIcon)
+  }
   schedulerService.initScheduler(mainWindow)
 
   app.on('activate', () => {
