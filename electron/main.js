@@ -192,9 +192,14 @@ function registerIpcHandlers() {
     }
   })
   ipcMain.handle('ai-reply', (_, { bundleId, suggestedReply }) => {
-    const { execSync } = require('child_process')
-    try { execSync(`printf '%s' ${JSON.stringify(suggestedReply)} | pbcopy`) } catch {}
-    try { if (bundleId) execSync(`open -b "${bundleId}"`) } catch {}
+    const { clipboard } = require('electron')
+    // Use Electron clipboard API (safe, cross-platform, no shell injection risk)
+    try { if (suggestedReply) clipboard.writeText(suggestedReply) } catch {}
+    // Only allow well-formed reverse-domain bundle IDs (e.g. jp.naver.line.mac)
+    if (bundleId && /^[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?$/.test(bundleId)) {
+      const { execSync } = require('child_process')
+      try { execSync(`open -b "${bundleId}"`) } catch {}
+    }
     return { ok: true }
   })
 
