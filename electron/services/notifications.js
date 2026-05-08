@@ -79,9 +79,10 @@ async function readMacNotifications() {
       const buf    = Buffer.from(hexData, 'hex')
       const parsed = bplist.parseBuffer(buf)[0]
 
-      const req   = parsed?.req || parsed
-      const title = req?.titl || req?.title || ''
-      const body  = req?.body || ''
+      const req      = parsed?.req || parsed
+      const title    = req?.titl || req?.title || ''
+      const subtitle = req?.subt || req?.subtitle || ''  // sender name inside group chats
+      const body     = req?.body || ''
 
       if (!title && !body) continue
 
@@ -90,6 +91,7 @@ async function readMacNotifications() {
         app:       getMacAppName(bundleId || ''),
         bundleId:  bundleId || '',
         title,
+        subtitle,
         body,
         timestamp: (parseFloat(deliveredDate) + CORE_DATA_OFFSET) * 1000,
       })

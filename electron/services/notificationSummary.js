@@ -60,9 +60,12 @@ async function generateSmartSummary(notifications) {
   }
 
   // Build the flat message list for the prompt
+  // Format: [i] App 群組名稱《發送者》時間: 內文  (群組)
+  //         [i] App 發送者 時間: 內文             (1-on-1)
   const lines = notifications.map((n, i) => {
-    const time = formatTime(n.timestamp)
-    const body = n.body ? `${n.title} ${time}: ${n.body}` : `${n.title} ${time}: （無內文）`
+    const time   = formatTime(n.timestamp)
+    const sender = n.subtitle ? `${n.title}《${n.subtitle}》` : n.title
+    const body   = n.body ? `${sender} ${time}: ${n.body}` : `${sender} ${time}: （無內文）`
     return `[${i}] ${n.app} ${body}`
   })
 
@@ -80,17 +83,20 @@ async function generateSmartSummary(notifications) {
     }
   }
 
-  const prompt = `你是使用者的個人助理。以下是使用者剛收到的未讀通知（格式：[編號] App 發送者 時間: 內文）：
+  const prompt = `你是使用者的個人助理。以下是使用者剛收到的未讀通知：
+格式說明：
+- 1-on-1 訊息：[編號] App 發送者 時間: 內文
+- 群組訊息：[編號] App 群組名稱《發送者》時間: 內文（《》內為群組內的發言者）
 
 ${lines.join('\n')}
 
 請分析並輸出 JSON（只輸出 JSON，不要任何其他說明文字）：
 {
-  "overallSummary": "一句話總結，例如『收到 X 則訊息，來自 Y 位聯絡人』",
+  "overallSummary": "一句話總結，例如『收到 X 則訊息，來自 Y 位聯絡人或群組』",
   "groups": [
     {
       "app": "App名稱",
-      "sender": "發送者名稱",
+      "sender": "發送者名稱（群組訊息填群組名稱）",
       "topic": "此話題的簡短標題（10字內）",
       "urgency": "high" 或 "medium" 或 "low" 或 null,
       "messageIndices": [對應上方的編號陣列],
@@ -101,11 +107,12 @@ ${lines.join('\n')}
 }
 
 規則：
-1. 同一發送者不同話題 → 拆成不同 group
-2. 同一發送者同一話題的多則訊息 → 合併成一個 group，messageIndices 包含所有該話題的編號
-3. urgency 判斷：確定很急（問時間/截止/緊急字眼）→ high；一般工作或問問題 → medium；聊天閒聊 → low；無法判斷 → null
-4. groups 按 urgency 排序：high → medium → low → null，同 urgency 按最新時間排
-5. 只輸出 JSON，不要 markdown code block`
+1. 群組訊息（格式含《》）→ sender 填群組名稱，不同群組各自獨立 group
+2. 1-on-1 訊息 → sender 填發送者名稱，同一人不同話題拆成不同 group
+3. 同一 sender 同一話題的多則訊息 → 合併成一個 group，messageIndices 包含所有編號
+4. urgency 判斷：確定很急（問時間/截止/緊急字眼）→ high；一般工作或問問題 → medium；聊天閒聊 → low；無法判斷 → null
+5. groups 按 urgency 排序：high → medium → low → null，同 urgency 按最新時間排
+6. 只輸出 JSON，不要 markdown code block`
 
   try {
     const raw = await callLLM({
