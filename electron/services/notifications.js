@@ -35,77 +35,35 @@ async function readMacNotifications() {
     return { error: 'db_not_found', notifications: [] }
   }
 
-  let SQL
-  try {
-    const initSqlJs   = require('sql.js')
-    const { app }     = require('electron')
-    const wasmBinary  = fs.readFileSync(
-      app.isPackaged
-        ? path.join(process.resourcesPath, 'sql-wasm.wasm')
-        : path.join(__dirname, '../../node_modules/sql.js/dist/sql-wasm.wasm')
-    )
-    SQL = await initSqlJs({ wasmBinary })
-  } catch (e) {
-    return { error: 'sql_load_failed', notifications: [] }
-  }
+  // Use system sqlite3 CLI which automatically merges WAL files,
+  // so we always get the latest notifications without stale data.
+  const CORE_DATA_OFFSET = 978307200
+  const hoursBack = 48
+  const cutoff = Math.floor(Date.now() / 1000) - CORE_DATA_OFFSET - (hoursBack * 3600)
 
-  let dbBuffer
-  const tmpPath = path.join(os.tmpdir(), `notif_db_${Date.now()}`)
-  try {
-    // First try Node fs.copyFileSync
-    fs.copyFileSync(MAC_DB_PATH, tmpPath)
-  } catch (e1) {
-    if (e1.code === 'EACCES' || e1.code === 'EPERM') {
-      // Fallback: shell cp sometimes bypasses sandbox limits
-      try {
-        execSync(`cp "${MAC_DB_PATH}" "${tmpPath}"`, { timeout: 5000 })
-      } catch (e2) {
-        return { error: 'permission_denied', notifications: [] }
-      }
-    } else {
-      return { error: e1.message, notifications: [] }
-    }
-  }
-  try {
-    dbBuffer = fs.readFileSync(tmpPath)
-  } catch (e) {
-    return { error: 'permission_denied', notifications: [] }
-  } finally {
-    try { fs.unlinkSync(tmpPath) } catch {}
-  }
+  const query = `SELECT hex(r.data) as data_hex,r.delivered_date,a.identifier FROM record r LEFT JOIN app a ON r.app_id=a.app_id WHERE r.delivered_date>${cutoff} ORDER BY r.delivered_date DESC LIMIT 200`
 
-  const db = new SQL.Database(dbBuffer)
-
-  // Only fetch notifications still uncleared in macOS Notification Center.
   let rows = []
   try {
-    const result = db.exec(
-      `SELECT r.data, r.delivered_date, a.identifier
-       FROM record r
-       LEFT JOIN app a ON r.app_id = a.app_id
-       WHERE EXISTS (
-         SELECT 1 FROM delivered d
-         WHERE d.app_id = r.app_id
-           AND d.list IS NOT NULL
-           AND INSTR(d.list, r.uuid) > 0
-       )
-       ORDER BY r.delivered_date DESC LIMIT 200`
-    )
-    rows = result?.[0]?.values || []
-  } catch {
-    db.close()
+    const output = execSync(`sqlite3 -json "${MAC_DB_PATH}" "${query}"`, {
+      encoding: 'utf8',
+      timeout: 10000,
+    })
+    rows = JSON.parse(output || '[]')
+  } catch (e) {
+    const msg = e.message || ''
+    if (e.status === 23 || msg.includes('EPERM') || msg.includes('EACCES') || msg.includes('authorization denied')) {
+      return { error: 'permission_denied', notifications: [] }
+    }
     return { error: 'query_failed', notifications: [] }
   }
 
-  db.close()
-
-  const CORE_DATA_OFFSET = 978307200
   const bplist        = require('bplist-parser')
   const notifications = []
 
-  for (const [data, delivered_date, bundleId] of rows) {
+  for (const row of rows) {
     try {
-      const buf    = Buffer.from(data)
+      const buf    = Buffer.from(row.data_hex, 'hex')
       const parsed = bplist.parseBuffer(buf)[0]
 
       const req   = parsed?.req || parsed
@@ -116,11 +74,11 @@ async function readMacNotifications() {
 
       notifications.push({
         id:        buf.slice(0, 8).toString('hex'),
-        app:       getMacAppName(bundleId || ''),
-        bundleId:  bundleId || '',
+        app:       getMacAppName(row.identifier || ''),
+        bundleId:  row.identifier || '',
         title,
         body,
-        timestamp: (delivered_date + CORE_DATA_OFFSET) * 1000,
+        timestamp: (row.delivered_date + CORE_DATA_OFFSET) * 1000,
       })
     } catch {
       // skip malformed entries
