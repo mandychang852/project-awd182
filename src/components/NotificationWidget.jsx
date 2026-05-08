@@ -165,6 +165,7 @@ export default function NotificationWidget() {
   const [permErr,     setPermErr]     = useState(false)
   const [copied,      setCopied]      = useState(false)
   const [replyingKey, setReplyingKey] = useState(null)
+  const [lastUpdated, setLastUpdated] = useState(null)  // timestamp of last successful fetch
   const timerRef = useRef(null)
 
   const load = useCallback(async (force = false) => {
@@ -182,13 +183,14 @@ export default function NotificationWidget() {
       // Even if res.error exists (AI failed), still show fallback groups
       if (res.error) setAiError(res.error)
       setSmartData(res)
+      setLastUpdated(new Date())
     }
     setLoading(false)
   }, [])
 
   useEffect(() => {
     load()
-    timerRef.current = setInterval(load, 120000)  // 2 min: hash check is cheap, AI only fires on change
+    timerRef.current = setInterval(load, 30000)  // 30s: hash check is cheap, AI only fires on change
     return () => clearInterval(timerRef.current)
   }, [load])
 
@@ -229,6 +231,11 @@ export default function NotificationWidget() {
           <span className="badge badge-muted" style={{ marginRight: 6 }}>No AI</span>
         )}
         {copied && <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--green)', marginRight: 8 }}>✓ 已複製</span>}
+        {lastUpdated && !loading && (
+          <span style={{ fontSize: 'var(--fs-meta)', color: 'var(--text-muted)', marginRight: 6 }}>
+            {lastUpdated.getHours().toString().padStart(2,'0')}:{lastUpdated.getMinutes().toString().padStart(2,'0')} 更新
+          </span>
+        )}
         <button
           className="btn btn-ghost btn-sm btn-icon"
           onClick={() => load(true)}
