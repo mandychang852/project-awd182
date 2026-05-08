@@ -72,7 +72,8 @@ async function readMacNotifications() {
     if (!trimmed) continue
     const parts = trimmed.split('|')
     if (parts.length < 2) continue
-    const [hexData, deliveredDate, bundleId] = parts
+    const [hexData, deliveredDate, rawBundleId] = parts
+    const bundleId = (rawBundleId || '').trim()
 
     try {
       const buf    = Buffer.from(hexData, 'hex')

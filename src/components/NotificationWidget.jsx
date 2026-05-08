@@ -210,6 +210,7 @@ export default function NotificationWidget() {
     setReplyingKey(group.groupKey)
     await window.electronAPI.aiReply({
       bundleId:       group.bundleId,
+      app:            group.app,
       suggestedReply: group.suggestedReply,
     })
     setTimeout(() => setReplyingKey(null), 3000)

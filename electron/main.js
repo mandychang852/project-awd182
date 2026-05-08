@@ -199,21 +199,31 @@ function registerIpcHandlers() {
     'com.discord.Discord':       'discord://',
     'com.facebook.Messenger':    'fb-messenger://',
   }
+  // Fallback by display app name (when bundleId is missing/empty)
+  const APP_NAME_URL_SCHEMES = {
+    'Slack':     'slack://open',
+    'Teams':     'msteams://l/chat',
+    'Discord':   'discord://',
+    'Messenger': 'fb-messenger://',
+  }
 
-  ipcMain.handle('ai-reply', (_, { bundleId, suggestedReply }) => {
+  ipcMain.handle('ai-reply', (_, { bundleId, suggestedReply, app }) => {
     const { clipboard, shell } = require('electron')
     // Use Electron clipboard API (safe, cross-platform, no shell injection risk)
     try { if (suggestedReply) clipboard.writeText(suggestedReply) } catch {}
+    const cleanBundleId = (bundleId || '').trim()
     // Only allow well-formed reverse-domain bundle IDs (e.g. jp.naver.line.mac)
-    if (bundleId && /^[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?$/.test(bundleId)) {
-      const urlScheme = BUNDLE_URL_SCHEMES[bundleId]
+    if (cleanBundleId && /^[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?$/.test(cleanBundleId)) {
+      const urlScheme = BUNDLE_URL_SCHEMES[cleanBundleId]
       if (urlScheme) {
-        // URL scheme is more reliable for Electron-based apps (Slack, Teams, etc.)
         shell.openExternal(urlScheme).catch(() => {})
       } else {
         const { execSync } = require('child_process')
-        try { execSync(`open -b "${bundleId}"`) } catch {}
+        try { execSync(`open -b "${cleanBundleId}"`) } catch {}
       }
+    } else if (app && APP_NAME_URL_SCHEMES[app]) {
+      // Fallback: open by app display name when bundleId unavailable
+      shell.openExternal(APP_NAME_URL_SCHEMES[app]).catch(() => {})
     }
     return { ok: true }
   })
