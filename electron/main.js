@@ -55,7 +55,8 @@ function loadServices() {
 
 function registerIpcHandlers() {
   // ── Caches ────────────────────────────────────────────────────────────────
-  let _smartSummaryCache    = null   // { hash, result }
+  let _smartSummaryCache    = null   // { hash, result } — invalidated when notifications change
+  let _smartSummaryLastGood = null   // last successful AI result — kept across hash changes
   let _smartSummaryInFlight = null   // dedup in-flight promise
   let _insightCacheDate     = null   // 'YYYY-M-D'
   let _insightCache         = null
@@ -135,12 +136,19 @@ function registerIpcHandlers() {
       .then((r) => {
         // Only cache successful AI results; failed/fallback results are NOT cached
         // so the next retry will actually re-call the API
-        if (!r.error) _smartSummaryCache = { hash, result: r }
+        if (!r.error) {
+          _smartSummaryCache    = { hash, result: r }
+          _smartSummaryLastGood = r  // persist across hash changes for stale fallback
+        }
         _smartSummaryInFlight = null
         return r
       })
       .catch((e) => {
         _smartSummaryInFlight = null
+        // If AI fails but we have a previous good result, return it with stale flag
+        if (_smartSummaryLastGood) {
+          return { ..._smartSummaryLastGood, stale: true, staleError: e.message }
+        }
         return { groups: [], overallSummary: null, demo: true, error: e.message }
       })
     return _smartSummaryInFlight
