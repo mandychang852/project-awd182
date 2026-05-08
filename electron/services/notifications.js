@@ -35,24 +35,30 @@ async function readMacNotifications() {
     return { error: 'db_not_found', notifications: [] }
   }
 
-  // Use system sqlite3 CLI which automatically merges WAL files,
-  // so we always get the latest notifications without stale data.
+  // Use macOS built-in sqlite3 CLI instead of sql.js to correctly read WAL files.
+  // sql.js reads a binary snapshot of the main db file and misses unflushed WAL data,
+  // causing notifications to appear frozen. The system sqlite3 CLI auto-applies WAL.
   const CORE_DATA_OFFSET = 978307200
   const hoursBack = 48
   const cutoff = Math.floor(Date.now() / 1000) - CORE_DATA_OFFSET - (hoursBack * 3600)
 
-  const query = `SELECT hex(r.data) as data_hex,r.delivered_date,a.identifier FROM record r LEFT JOIN app a ON r.app_id=a.app_id WHERE r.delivered_date>${cutoff} ORDER BY r.delivered_date DESC LIMIT 200`
+  const query = [
+    `SELECT hex(r.data), r.delivered_date, a.identifier`,
+    `FROM record r`,
+    `LEFT JOIN app a ON r.app_id = a.app_id`,
+    `WHERE r.delivered_date > ${cutoff}`,
+    `ORDER BY r.delivered_date DESC LIMIT 200;`,
+  ].join(' ')
 
-  let rows = []
+  let stdout
   try {
-    const output = execSync(`sqlite3 -json "${MAC_DB_PATH}" "${query}"`, {
-      encoding: 'utf8',
+    stdout = execSync(`sqlite3 "${MAC_DB_PATH}" "${query}"`, {
       timeout: 10000,
-    })
-    rows = JSON.parse(output || '[]')
+      maxBuffer: 20 * 1024 * 1024,
+    }).toString()
   } catch (e) {
     const msg = e.message || ''
-    if (e.status === 23 || msg.includes('EPERM') || msg.includes('EACCES') || msg.includes('authorization denied')) {
+    if (msg.includes('unable to open') || msg.includes('EACCES') || msg.includes('permission')) {
       return { error: 'permission_denied', notifications: [] }
     }
     return { error: 'query_failed', notifications: [] }
@@ -61,9 +67,15 @@ async function readMacNotifications() {
   const bplist        = require('bplist-parser')
   const notifications = []
 
-  for (const row of rows) {
+  for (const line of stdout.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    const parts = trimmed.split('|')
+    if (parts.length < 2) continue
+    const [hexData, deliveredDate, bundleId] = parts
+
     try {
-      const buf    = Buffer.from(row.data_hex, 'hex')
+      const buf    = Buffer.from(hexData, 'hex')
       const parsed = bplist.parseBuffer(buf)[0]
 
       const req   = parsed?.req || parsed
@@ -74,11 +86,11 @@ async function readMacNotifications() {
 
       notifications.push({
         id:        buf.slice(0, 8).toString('hex'),
-        app:       getMacAppName(row.identifier || ''),
-        bundleId:  row.identifier || '',
+        app:       getMacAppName(bundleId || ''),
+        bundleId:  bundleId || '',
         title,
         body,
-        timestamp: (row.delivered_date + CORE_DATA_OFFSET) * 1000,
+        timestamp: (parseFloat(deliveredDate) + CORE_DATA_OFFSET) * 1000,
       })
     } catch {
       // skip malformed entries
