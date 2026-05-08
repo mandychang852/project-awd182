@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import appIcon from '../assets/app-icon.png'
 
 export default function Header({ onOpenSettings }) {
   const [now, setNow] = useState(new Date())
@@ -21,7 +22,7 @@ export default function Header({ onOpenSettings }) {
 
       <div style={styles.brandArea}>
         <div style={styles.logo}>
-          <span style={styles.logoIcon}>⚡</span>
+          <img src={appIcon} alt="logo" style={styles.logoIcon} />
         </div>
         <div>
           <div style={styles.appName}>我的小當家</div>
@@ -75,15 +76,9 @@ const styles = {
   logo: {
     width: 36,
     height: 36,
-    borderRadius: 10,
-    background: 'linear-gradient(135deg, #2a5f9e, #4a90c4)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: '0 4px 12px rgba(74, 144, 196, 0.4)',
-    fontSize: 18,
+    flexShrink: 0,
   },
-  logoIcon: { lineHeight: 1 },
+  logoIcon: { width: 36, height: 36, display: 'block' },
   appName: {
     fontSize: 15,
     fontWeight: 700,

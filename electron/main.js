@@ -266,10 +266,10 @@ app.whenReady().then(() => {
   loadServices()
   registerIpcHandlers()
   createWindow()
-  // Set Dock icon on macOS (works in dev mode too)
+  // Set Dock icon on macOS (use PNG — more reliable than icns in dev mode)
   if (process.platform === 'darwin' && app.dock) {
     const { nativeImage } = require('electron')
-    const dockIcon = nativeImage.createFromPath(path.join(__dirname, '../build/icons/mac/icon.icns'))
+    const dockIcon = nativeImage.createFromPath(path.join(__dirname, '../build/icons/png/512x512.png'))
     if (!dockIcon.isEmpty()) app.dock.setIcon(dockIcon)
   }
   schedulerService.initScheduler(mainWindow)
