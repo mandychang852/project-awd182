@@ -16,6 +16,7 @@ const store = new Store({
     claudeApiKey: '',
     weatherApiKey: '',
     exchangeRateToken: '',
+    exchangeRateApiUrl: '',
     stocks: [],
     sinopacConnected: false,
     sinopacApiKey: '',

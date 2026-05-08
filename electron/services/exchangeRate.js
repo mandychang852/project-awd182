@@ -2,7 +2,8 @@ const axios  = require('axios')
 const storeService = require('./store')
 
 // ── API 設定 ───────────────────────────────────────────────────────────────
-const API_URL = 'https://superiorapis-creator.cteam.com.tw/manager/feature/proxy/9f32a9fac529/pub_9f32aace1ed0'
+// API_URL is provided by the user in settings (exchangeRateApiUrl)
+// Each user must create their own SuperiorAPIs proxy and paste the URL here.
 const timeout = 15000
 
 // 支援的幣別（API enum 對應）
@@ -22,8 +23,8 @@ let cacheTs = 0
 const CACHE_TTL = 5 * 60 * 1000
 
 // ── Fetch one currency from API ───────────────────────────────────────────
-async function fetchCurrency(code, token) {
-  const r = await axios.post(API_URL, {
+async function fetchCurrency(code, token, apiUrl) {
+  const r = await axios.post(apiUrl, {
     currency: CURRENCY_MAP[code],
     sort_options: [{ sort_key: 0, sort_order: 0 }],
   }, {
@@ -43,14 +44,15 @@ async function fetchCurrency(code, token) {
 async function fetchAllRates(opts = {}) {
   if (!opts.force && cache && Date.now() - cacheTs < CACHE_TTL) return cache
 
-  const token = storeService.get('exchangeRateToken') || ''
-  if (!token) {
+  const token  = storeService.get('exchangeRateToken')    || ''
+  const apiUrl  = storeService.get('exchangeRateApiUrl')   || ''
+  if (!token || !apiUrl) {
     return { banks: {}, fetchedAt: Date.now(), error: 'no_token' }
   }
 
   const results = await Promise.allSettled(
     Object.keys(CURRENCY_MAP).map(code =>
-      fetchCurrency(code, token)
+      fetchCurrency(code, token, apiUrl)
         .then(data => ({ code, data, ok: true }))
         .catch(err => ({ code, data: [], ok: false, error: err.message }))
     )
