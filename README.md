@@ -7,10 +7,11 @@
 ## 功能介紹
 
 ### 🔔 智慧通知中心
-- 自動讀取 macOS 通知中心未清除的訊息（需要完整磁碟存取權限）
+- 自動讀取 macOS 通知中心未清除的訊息（需要完整磁碟存取權限），每 30 秒自動刷新
+- 標題旁顯示「HH:MM 更新」，讓你隨時確認資料是否最新
 - 透過 AI 一次性分析所有未讀通知，依話題自動分群（同一個人的不同話題拆成不同卡片）
 - 每個話題顯示：AI 摘要、急迫程度（🔴 急 / 🟡 一般）、建議回覆內容
-- 建議回覆可直接編輯，一鍵複製或開啟對應 App 回覆
+- 建議回覆可直接編輯；按「馬上回覆」會自動複製回覆文字到剪貼簿，並開啟對應 App（LINE、Slack 等）
 - 標記「已處理」讓你知道哪些還沒處理（重整後清空）
 - 按 ↻ 強制重新分析（即使通知內容沒變化）
 
@@ -107,7 +108,8 @@ npm run dist
 - **前端**：React 18 + Vite
 - **桌面殼**：Electron 29
 - **資料儲存**：electron-store（設定）
-- **通知讀取**：macOS `usernoted` SQLite DB（需完整磁碟存取）
+- **通知讀取**：macOS `usernoted` SQLite DB，透過系統 `sqlite3` CLI 讀取（自動套用 WAL，解決資料停留問題）；Windows 使用 WPN SQLite DB
+- **馬上回覆**：使用 Electron 原生 `clipboard.writeText()` 複製回覆；開啟 App 優先使用 URL Scheme（Slack `slack://`、Teams `msteams://` 等），其餘 App 使用 `open -b BundleID`
 - **AI**：單次 LLM call，hash 快取避免重複打 API
 - **股票資料**：Yahoo Finance API + TWSE / TPEx OpenAPI
 
