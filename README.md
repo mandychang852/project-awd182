@@ -108,16 +108,20 @@ App 的通知分析功能需要連接 AI 服務。推薦使用 **Google Gemini**
 
 ---
 
-### 第二步：設定天氣
+### 第二步：設定匯率功能（選填）
 
-天氣功能需要 OpenWeatherMap 的免費 API 金鑰。
+匯率功能需要透過 SuperiorAPIs 平台建立一個 API 代理，並取得金鑰。這是因為銀行匯率資料需要透過代理才能存取。
 
 **申請步驟：**
 
-1. 前往 [https://openweathermap.org/api](https://openweathermap.org/api) 註冊免費帳號
-2. 登入後到 [API Keys 頁面](https://home.openweathermap.org/api_keys) 複製你的 API Key
-3. 在 App 設定中貼入「**天氣 API Key**」欄位
-4. 在「**城市**」欄位輸入你的所在城市（例如：台北市、新竹市）
+1. 前往 [https://superiorapis.com](https://superiorapis.com) 註冊帳號
+2. 建立一個新的 API Proxy，選擇台灣銀行匯率相關的 API
+3. 取得你的 **API URL** 和 **Token**
+4. 在 App 設定中：
+   - 「**匯率 API URL**」欄位貼入你的 API URL
+   - 「**匯率 Token**」欄位貼入你的 Token
+
+> 若未設定，匯率頁面將無法顯示資料，其他功能不受影響。
 
 ---
 
