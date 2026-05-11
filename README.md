@@ -69,6 +69,30 @@ npm run dist
 > **注意（Mac 專屬）**：首次使用通知中心功能，需要授予「完整磁碟存取」權限：  
 > 系統設定 → 隱私權與安全性 → 完整磁碟存取 → 加入本 App
 
+---
+
+### ⚠️ Mac 開啟時出現「檔案已毀損」的解決方法
+
+由於本 App 尚未通過 Apple 官方簽名，macOS 的 Gatekeeper 安全機制可能會阻擋開啟並顯示「檔案已毀損」。這不是真的檔案問題，請依照以下步驟解決：
+
+**步驟一：下載並安裝 App**
+前往 GitHub Releases 頁面，下載最新的 `.dmg` 檔案。  
+雙擊 `.dmg` → 將「我的小當家」App 圖示拖入右側的 Applications 資料夾。
+
+**步驟二：打開 Terminal（終端機）**
+按 `Command (⌘) + 空白鍵` 開啟 Spotlight 搜尋，輸入「Terminal」後按 Enter。
+
+**步驟三：貼上以下指令並執行**
+```bash
+xattr -cr /Applications/我的小當家.app
+```
+複製上方指令，貼到 Terminal 視窗後按 Enter。沒有任何輸出就代表執行成功。
+
+**步驟四：重新打開 App**
+回到 Finder → 應用程式，雙擊「我的小當家」即可正常開啟。
+
+> 此步驟只需要執行**一次**，之後就可以直接開啟。
+
 ### Windows 使用者
 
 ```bash
