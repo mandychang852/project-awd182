@@ -1,141 +1,133 @@
 # 我的小當家 — 個人化智慧通知助手
 
-一款基於 Electron + React 的桌面 App，整合 AI 語言模型，協助你在回到電腦後快速掌握未讀訊息重點，並直接生成建議回覆。
+幫你在回到電腦後，快速用 AI 統整所有未讀訊息重點、生成建議回覆，同時整合股票、天氣、匯率資訊，一個畫面掌握所有事情。
 
 ---
 
 ## 功能介紹
 
 ### 🔔 智慧通知中心
-- 自動讀取 macOS 通知中心未清除的訊息（需要完整磁碟存取權限），每 30 秒自動刷新
-- 標題旁顯示「HH:MM 更新」，讓你隨時確認資料是否最新
-- 透過 AI 一次性分析所有未讀通知，依話題自動分群（同一個人的不同話題拆成不同卡片）
-- 每個話題顯示：AI 摘要、急迫程度（🔴 急 / 🟡 一般）、建議回覆內容
-- 建議回覆可直接編輯；按「馬上回覆」會自動複製回覆文字到剪貼簿，並開啟對應 App（LINE、Slack 等）
-- 標記「已處理」讓你知道哪些還沒處理（重整後清空）
-- 按 ↻ 強制重新分析（即使通知內容沒變化）
+- 自動讀取通知中心未清除的訊息，每 30 秒自動刷新
+- 用 AI 分析所有未讀通知，依話題自動分群整理
+- 每個話題顯示：AI 摘要、急迫程度（🔴 急 / 🟡 一般）、建議回覆
+- 按「馬上回覆」自動複製回覆文字到剪貼簿，並開啟對應 App（LINE、Slack 等）
+- 按 ↻ 強制重新分析
 
 ### 📈 股票追蹤
-- 追蹤台股（TSE / OTC）與美股即時報價
-- 支援以中文名稱搜尋台股（例如「台積電」）
-- 顯示損益試算，依幣別分開計算（台幣 / 美元）
-- 設定目標高低價，達到時會彈出提醒通知
+- 追蹤台股與美股即時報價，支援以中文名稱搜尋（例如「台積電」）
+- 顯示損益試算，設定目標高低價達到時彈出通知
 
 ### ☀️ 天氣 & 星座運勢
-- 顯示目前所在城市的天氣狀況
-- 每日星座運勢摘要
+- 顯示目前城市天氣狀況與每日星座運勢
 
 ### 💱 外幣匯率
-- 顯示台灣銀行即時買入 / 賣出匯率
-- 支援多種幣別，提供最佳換匯建議
-
-### ⚙️ AI 設定
-- 支援 Google Gemini（免費）、OpenAI、Anthropic Claude
-- 可在設定頁面測試 API 金鑰是否連線正常
+- 顯示台灣銀行即時買入 / 賣出匯率，提供最佳換匯建議
 
 ---
 
-## 安裝與開發環境啟動
-
-### 系統需求
-- Node.js 18 以上
-- npm 9 以上
-
-### 步驟
-
-```bash
-# 1. 安裝依賴套件
-npm install
-
-# 2. 啟動開發模式（Vite + Electron 同時執行）
-npm run dev
-```
-
-開發模式下會自動開啟 DevTools，可在 Console 看到 AI 輸出的原始 log。
-
----
-
-## 打包成獨立 App
+## 下載與安裝
 
 ### Mac 使用者
 
-```bash
-npm run dist
-```
+**步驟一：下載安裝檔**
 
-打包完成後，`dist/` 資料夾會產生 `.dmg` 安裝檔。  
-雙擊 `.dmg` → 將 App 拖入 Applications 資料夾即可使用。
+前往 [Releases 頁面](../../releases/latest)，點擊 `我的小當家-x.x.x-arm64.dmg` 下載。
 
-> **注意（Mac 專屬）**：首次使用通知中心功能，需要授予「完整磁碟存取」權限：  
-> 系統設定 → 隱私權與安全性 → 完整磁碟存取 → 加入本 App
+**步驟二：安裝 App**
+
+下載完成後，在下載資料夾雙擊 `.dmg` 檔案，將「我的小當家」圖示拖入右側的「Applications（應用程式）」資料夾。
+
+**步驟三：解除 macOS 安全性限制**
+
+由於本 App 尚未通過 Apple 官方付費簽名，macOS 第一次開啟時會顯示「檔案已毀損」。這不是真的文件問題，只需要執行一次以下步驟即可：
+
+1. 按 `Command (⌘) + 空白鍵` 開啟 Spotlight，輸入 **Terminal**，按 Enter 開啟終端機
+2. 複製以下指令，貼到終端機視窗後按 Enter：
+   ```
+   xattr -cr /Applications/我的小當家.app
+   ```
+   沒有任何輸出就代表成功。
+
+**步驟四：開啟 App**
+
+回到 Finder → 應用程式，雙擊「我的小當家」即可正常開啟。之後每次直接雙擊開啟即可，不需再執行指令。
+
+**步驟五：授予完整磁碟存取權限（通知中心功能必要）**
+
+首次使用通知中心功能，需要授予權限讓 App 讀取系統通知：
+
+1. 開啟「系統設定」→「隱私權與安全性」→「完整磁碟存取」
+2. 點擊左下角 `+`，找到「我的小當家」並新增
+3. 重新啟動 App
 
 ---
-
-### ⚠️ Mac 開啟時出現「檔案已毀損」的解決方法
-
-由於本 App 尚未通過 Apple 官方簽名，macOS 的 Gatekeeper 安全機制可能會阻擋開啟並顯示「檔案已毀損」。這不是真的檔案問題，請依照以下步驟解決：
-
-**步驟一：下載並安裝 App**
-前往 GitHub Releases 頁面，下載最新的 `.dmg` 檔案。  
-雙擊 `.dmg` → 將「我的小當家」App 圖示拖入右側的 Applications 資料夾。
-
-**步驟二：打開 Terminal（終端機）**
-按 `Command (⌘) + 空白鍵` 開啟 Spotlight 搜尋，輸入「Terminal」後按 Enter。
-
-**步驟三：貼上以下指令並執行**
-```bash
-xattr -cr /Applications/我的小當家.app
-```
-複製上方指令，貼到 Terminal 視窗後按 Enter。沒有任何輸出就代表執行成功。
-
-**步驟四：重新打開 App**
-回到 Finder → 應用程式，雙擊「我的小當家」即可正常開啟。
-
-> 此步驟只需要執行**一次**，之後就可以直接開啟。
 
 ### Windows 使用者
 
-```bash
-npm run dist
-```
+**步驟一：下載安裝檔**
 
-打包完成後，`dist/` 資料夾會產生 `.exe` 安裝檔（NSIS 格式）。  
-雙擊安裝後即可使用。
+前往 [Releases 頁面](../../releases/latest)，點擊 `我的小當家 Setup x.x.x.exe` 下載。
 
-> **注意**：Windows 版本已支援通知中心讀取功能。與 macOS 不同，Windows 不需要額外的「完整磁碟存取」權限，但仍建議以一般使用者權限執行即可。其他功能（股票、天氣、匯率、AI 設定）亦均可正常使用。
+**步驟二：安裝 App**
 
----
+雙擊下載的 `.exe` 安裝檔，依照畫面指示完成安裝。
 
-## 設定 API 金鑰
+> Windows Defender 可能會顯示「已保護您的電腦」警告，點擊「其他資訊」→「仍要執行」即可繼續。
 
-啟動 App 後，點擊右上角 ⚙️ 進入設定頁面：
+**步驟三：開啟 App**
 
-| 功能 | 需要的 API |
-|------|-----------|
-| AI 通知分析 / 建議回覆 | Google Gemini（免費）或 OpenAI 或 Claude |
-| 天氣 | OpenWeatherMap（免費） |
-| 匯率 | 台灣銀行 Open API（免費，無需金鑰） |
-| 股票 | Yahoo Finance（免費，無需金鑰） |
-
-### 推薦：Google Gemini 免費 API 金鑰申請
-
-1. 前往 [https://aistudio.google.com/apikey](https://aistudio.google.com/apikey)
-2. 點「Create API key」→「Create API key in new project」
-3. 複製金鑰，貼入設定頁面的「Google Gemini API Key」欄位
-4. 模型選 `gemini-2.5-flash`
-5. 點「🔌 測試連線」確認成功
+安裝完成後，從開始選單或桌面捷徑開啟「我的小當家」。
 
 ---
 
-## 技術架構
+## 初次設定
 
-- **前端**：React 18 + Vite
-- **桌面殼**：Electron 29
-- **資料儲存**：electron-store（設定）
-- **通知讀取**：macOS `usernoted` SQLite DB，透過系統 `sqlite3` CLI 讀取（自動套用 WAL，解決資料停留問題）；Windows 使用 WPN SQLite DB
-- **馬上回覆**：使用 Electron 原生 `clipboard.writeText()` 複製回覆；開啟 App 優先使用 URL Scheme（Slack `slack://`、Teams `msteams://` 等），其餘 App 使用 `open -b BundleID`
-- **AI**：單次 LLM call，hash 快取避免重複打 API
-- **股票資料**：Yahoo Finance API + TWSE / TPEx OpenAPI
+安裝完成後，App 會引導你完成基本設定。也可以隨時點右上角 ⚙️ 進入設定頁面修改。
+
+---
+
+### 第一步：選擇 AI 服務
+
+App 的通知分析功能需要連接 AI 服務。推薦使用 **Google Gemini**，完全免費。
+
+**申請 Google Gemini 免費 API 金鑰：**
+
+1. 前往 [https://aistudio.google.com/apikey](https://aistudio.google.com/apikey)（需要 Google 帳號登入）
+2. 點擊「**Create API key**」→「**Create API key in new project**」
+3. 複製產生的金鑰（格式像 `AIzaSy...`）
+
+**在 App 設定中填入：**
+
+1. 開啟 App，點右上角 ⚙️ 進入設定
+2. AI 服務選擇「**Google Gemini**」
+3. 將複製的金鑰貼入「**Google Gemini API Key**」欄位
+4. 模型選擇 `gemini-2.5-flash`
+5. 點「**🔌 測試連線**」，出現「連線成功」即完成
+
+> 若你有 OpenAI 或 Anthropic Claude 的 API 金鑰，也可以選擇對應的服務填入。
+
+---
+
+### 第二步：設定天氣
+
+天氣功能需要 OpenWeatherMap 的免費 API 金鑰。
+
+**申請步驟：**
+
+1. 前往 [https://openweathermap.org/api](https://openweathermap.org/api) 註冊免費帳號
+2. 登入後到 [API Keys 頁面](https://home.openweathermap.org/api_keys) 複製你的 API Key
+3. 在 App 設定中貼入「**天氣 API Key**」欄位
+4. 在「**城市**」欄位輸入你的所在城市（例如：台北市、新竹市）
+
+---
+
+### 第三步：新增股票（選填）
+
+1. 在 App 點擊「股票」分頁
+2. 點擊「**+ 新增**」，輸入股票代號（例如 `2330`）或中文名稱（例如「台積電」）
+3. 可設定持有成本與目標高低價，達到時會發出提醒
+
+> 股票與匯率功能不需要設定任何 API 金鑰，直接使用即可。
 
 ---
 
