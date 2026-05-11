@@ -30,6 +30,11 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
+      - name: Ad-hoc sign the app
+        run: |
+          APP_PATH=$(find dist -name "*.app" -maxdepth 3 | head -1)
+          codesign --deep --force --sign - "$APP_PATH"
+
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
