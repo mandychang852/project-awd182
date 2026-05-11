@@ -114,12 +114,14 @@ App 的通知分析功能需要連接 AI 服務。推薦使用 **Google Gemini**
 
 **申請步驟：**
 
-1. 前往 [https://superiorapis.com](https://superiorapis.com) 註冊帳號
-2. 建立一個新的 API Proxy，選擇台灣銀行匯率相關的 API
-3. 取得你的 **API URL** 和 **Token**
-4. 在 App 設定中：
-   - 「**匯率 API URL**」欄位貼入你的 API URL
-   - 「**匯率 Token**」欄位貼入你的 Token
+1. 前往 [https://superiorapis.cteam.com.tw/?tryme=44782144a0ce](https://superiorapis.cteam.com.tw/?tryme=44782144a0ce) 註冊帳號（可使用 google 帳號連動）
+2. 至「各大銀行臺幣匯兌價格」專案中，複製 **API URL** 和 **Token** 並且至我的小當家的設定頁面中貼上
+3. **API URL** 位置：
+
+    至「各大銀行臺幣匯兌價格」專案的「輸入」頁面中，點開下方 「</>程式碼」按鈕，畫面右側會跳出程式碼，請複製第五行帶有 ... URL = "https://superiorapis-..." 的雙引號中的文字（不含雙引號）
+4. **Token** 位置：
+
+    至「各大銀行臺幣匯兌價格」專案的「整合」頁面中，複製 Authentication 的 API Key
 
 > 若未設定，匯率頁面將無法顯示資料，其他功能不受影響。
 
